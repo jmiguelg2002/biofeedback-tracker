@@ -168,6 +168,17 @@ if st.session_state.get('session_active', False) and time.time() < st.session_st
     st.metric("Average Bandwidth", f"{avg_bw:.2f} Mbps")
     st.metric("Average Latency", f"{avg_latency:.2f} ms")
     st.metric("Overall Status", status)
+    
+    # CSV Download
+    df["time"] = df["time"].astype(str)  # convert datetime to string for CSV
+    csv = df.to_csv(index=False).encode('utf-8')
+    st.download_button(
+    label="📥 Download Session Data as CSV",
+    data=csv,
+    file_name=f"biofeedback_session_{st.session_state.session_id}.csv",
+    mime='text/csv',
+    )
+
 
     session.close()
     st.session_state.session_active = False

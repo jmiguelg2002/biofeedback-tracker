@@ -75,7 +75,7 @@ user_id = st.selectbox("Select User", USER_OPTIONS)
 app_id = st.selectbox("Select Application", APP_OPTIONS)
 duration = st.slider("Session Duration (seconds)", 10, 600, DEFAULT_DURATION)
 
-note = st.text_area("Optional Note for This Session", placeholder="E.g. Feeling anxious today, testing after workout...")
+# note = st.text_area("Optional Note for This Session", placeholder="E.g. Feeling anxious today, testing after workout...")
 
 if 'pause_state' not in st.session_state:
     st.session_state.pause_state = False
@@ -124,7 +124,6 @@ if st.session_state.get('session_active', False) and time.time() < st.session_st
             bandwidth=float(bandwidth),
             latency=float(latency),
             policy=policy,
-            note=note,
             timestamp=now
         )
 
@@ -144,9 +143,14 @@ if st.session_state.get('session_active', False) and time.time() < st.session_st
 
         with placeholder.container():
             st.subheader(f"Live Session - {user_id} ({app_id})")
-            st.line_chart(df.set_index("time")["heart_rate"], height=300, use_container_width=True)
-            st.line_chart(df.set_index("time")["hrv"], height=300, use_container_width=True)
-            st.line_chart(df.set_index("time")["stress"], height=300, use_container_width=True)
+ #          st.line_chart(df.set_index("time")["heart_rate"], height=300, use_container_width=True)
+ #          st.line_chart(df.set_index("time")["hrv"], height=300, use_container_width=True)
+ #          st.line_chart(df.set_index("time")["stress"], height=300, use_container_width=True)
+            st.line_chart(
+            df.set_index("time")[["heart_rate", "hrv", "stress"]],
+            height=400,
+            use_container_width=True
+            )
             st.metric("Current State", state)
             st.metric("QoS Level", qos_level)
 
@@ -157,17 +161,25 @@ if st.session_state.get('session_active', False) and time.time() < st.session_st
     avg_hr, avg_hrv, avg_stress, avg_bw, avg_latency, status, max_hr, min_hr, max_stress, min_hrv = summarize_session(df)
     st.subheader("📝 Session Summary")
     st.write(f"**Session ID:** {st.session_state.session_id}")
-    st.write(f"**User Note:** {note}")
+ #  st.write(f"**User Note:** {note}")
     st.metric("Average Heart Rate", f"{avg_hr:.2f} bpm")
-    st.metric("Min Heart Rate", f"{min_hr:.2f} bpm")
-    st.metric("Max Heart Rate", f"{max_hr:.2f} bpm")
+ #  st.metric("Min Heart Rate", f"{min_hr:.2f} bpm")
+ #  st.metric("Max Heart Rate", f"{max_hr:.2f} bpm")
     st.metric("Average HRV", f"{avg_hrv:.2f}")
-    st.metric("Min HRV", f"{min_hrv:.2f}")
+ #  st.metric("Min HRV", f"{min_hrv:.2f}")
     st.metric("Average Stress", f"{avg_stress:.2f}")
-    st.metric("Max Stress", f"{max_stress:.2f}")
+ #  st.metric("Max Stress", f"{max_stress:.2f}")
     st.metric("Average Bandwidth", f"{avg_bw:.2f} Mbps")
     st.metric("Average Latency", f"{avg_latency:.2f} ms")
     st.metric("Overall Status", status)
+    
+    # Step 5: Simple visualization
+    st.write("📈 Summary")
+    # Round values to 2 decimals
+    avg_hr = round(avg_hr, 2)
+    avg_stress = round(avg_stress, 2)
+#   st.write(f"👤 User: `{user_id}` | 📱 App: `{app_id}` | ❤️ Heart Rate: `{avg_hr}` | 😰 Stress Level: `{avg_stress}`")
+    st.write(f"👤 User: `{user_id}` | 📱 App: `{app_id}` | 📊 **QoS Policy**: `{policy}` | ❤️ Heart Rate: `{avg_hr}` | 😰 Stress Level: `{avg_stress}`") 
     
     # CSV Download
     df["time"] = df["time"].astype(str)  # convert datetime to string for CSV

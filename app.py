@@ -14,7 +14,7 @@ DEFAULT_DURATION = 120
 USER_OPTIONS = ["user_001", "user_002", "user_abc"]
 APP_OPTIONS = ["work", "gaming", "social", "messages"]
 
-MOCK_API_URL = "https://nef-api.onrender.com/get_policy"  # ← update this to your public URL
+MOCK_API_URL = "https://nef-api.onrender.com/get_policy"
 
 QOS_MAPPING = {
     "Policy-Gold": "High",
@@ -25,13 +25,12 @@ QOS_MAPPING = {
 def map_policy_to_qos(policy):
     return QOS_MAPPING.get(policy, "Unknown")
 
-def get_policy_from_nef(user_id, app_id):
+def get_policy_from_nef(user_id, app_id, stress=None):
     try:
-        response = requests.get(
-            MOCK_API_URL,
-            params={"user_id": user_id, "app_id": app_id},
-            timeout=2
-        )
+        params = {"user_id": user_id, "app_id": app_id}
+        if stress is not None:
+            params["stress"] = stress
+        response = requests.get(MOCK_API_URL, params=params, timeout=2)
         if response.status_code == 200:
             return response.json()
     except Exception as e:
@@ -42,11 +41,13 @@ def generate_mock_data():
     return {
         "heart_rate": random.randint(60, 100),
         "hrv": random.randint(20, 80),
-        "stress": random.randint(30, 90)
+        "stress": random.randint(30, 100)
     }
 
 def determine_state(stress, hrv):
-    if stress > 80:
+    if stress > 95:
+        return "Critical"
+    elif stress > 80:
         return "Stressed"
     elif hrv < 30:
         return "Distracted"
@@ -81,6 +82,10 @@ if 'pause_state' not in st.session_state:
     st.session_state.pause_state = False
 if 'data_log' not in st.session_state:
     st.session_state.data_log = []
+if 'stress_peaks' not in st.session_state:
+    st.session_state.stress_peaks = []
+if 'max_stress_seen' not in st.session_state:
+    st.session_state.max_stress_seen = 0
 if 'session_active' not in st.session_state:
     st.session_state.session_active = False
 
@@ -88,6 +93,8 @@ if st.button("Start Session"):
     st.session_state.session_id = str(uuid.uuid4())
     st.session_state.end_time = time.time() + duration
     st.session_state.data_log = []
+    st.session_state.stress_peaks = []
+    st.session_state.max_stress_seen = 0
     st.session_state.pause_state = False
     st.session_state.session_active = True
 
@@ -105,12 +112,22 @@ if st.session_state.get('session_active', False) and time.time() < st.session_st
 
         now = datetime.utcnow()
         data = generate_mock_data()
-        nef_data = get_policy_from_nef(user_id, app_id)
+        nef_data = get_policy_from_nef(user_id, app_id, data["stress"])
         policy = nef_data["policy"]
         bandwidth = nef_data["bandwidth"]
         latency = nef_data["latency"]
         qos_level = map_policy_to_qos(policy)
         state = determine_state(data["stress"], data["hrv"])
+
+        if data["stress"] > st.session_state.max_stress_seen:
+            st.session_state.max_stress_seen = data["stress"]
+            if data["stress"] > 95:                                 
+                st.session_state.stress_peaks.append({"time": now, "stress": data["stress"]})
+
+        if state == "Critical":
+            st.error("🚨 Critical stress detected! ...")
+            with open("emergency_contact_log.txt", "a") as f:
+                f.write(f"{now} - {user_id} - {app_id} - Critical stress\n")
 
         log = BiofeedbackLog(
             session_id=st.session_state.session_id,
@@ -153,22 +170,26 @@ if st.session_state.get('session_active', False) and time.time() < st.session_st
             )
             st.metric("Current State", state)
             st.metric("QoS Level", qos_level)
+            
+            if st.session_state.stress_peaks:
+                st.write("### 🧠 Stress Peaks Timeline")
+                peak_df = pd.DataFrame(st.session_state.stress_peaks)
+                st.dataframe(peak_df.set_index("time"), use_container_width=True)
 
         time.sleep(1)
 
-    # Session Summary
     df = pd.DataFrame(st.session_state.data_log)
     avg_hr, avg_hrv, avg_stress, avg_bw, avg_latency, status, max_hr, min_hr, max_stress, min_hrv = summarize_session(df)
     st.subheader("📝 Session Summary")
     st.write(f"**Session ID:** {st.session_state.session_id}")
- #  st.write(f"**User Note:** {note}")
+#   st.write(f"**User Note:** {note}")
     st.metric("Average Heart Rate", f"{avg_hr:.2f} bpm")
- #  st.metric("Min Heart Rate", f"{min_hr:.2f} bpm")
- #  st.metric("Max Heart Rate", f"{max_hr:.2f} bpm")
+#   st.metric("Min Heart Rate", f"{min_hr:.2f} bpm")
+#   st.metric("Max Heart Rate", f"{max_hr:.2f} bpm")
     st.metric("Average HRV", f"{avg_hrv:.2f}")
- #  st.metric("Min HRV", f"{min_hrv:.2f}")
+#   st.metric("Min HRV", f"{min_hrv:.2f}")
     st.metric("Average Stress", f"{avg_stress:.2f}")
- #  st.metric("Max Stress", f"{max_stress:.2f}")
+#   st.metric("Max Stress", f"{max_stress:.2f}")
     st.metric("Average Bandwidth", f"{avg_bw:.2f} Mbps")
     st.metric("Average Latency", f"{avg_latency:.2f} ms")
     st.metric("Overall Status", status)
@@ -190,7 +211,6 @@ if st.session_state.get('session_active', False) and time.time() < st.session_st
     file_name=f"biofeedback_session_{st.session_state.session_id}.csv",
     mime='text/csv',
     )
-
-
+  
     session.close()
     st.session_state.session_active = False

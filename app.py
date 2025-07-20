@@ -11,7 +11,8 @@ import random
 DEFAULT_DURATION = 120
 APP_OPTIONS = ["work", "gaming", "social", "messages"]
 MOCK_API_URL = "https://nef-api.onrender.com/get_policy"
-SES_URL = "http://localhost:8081/validate"
+#SES_URL = "http://localhost:8081/validate"
+SES_URL = "https://mock-ses.onrender.com/validate" 
 
 QOS_MAPPING = {
     "Policy-Gold": "High",

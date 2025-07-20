@@ -1,3 +1,4 @@
+
 import streamlit as st
 import time
 import uuid
@@ -11,7 +12,8 @@ import random
 DEFAULT_DURATION = 120
 APP_OPTIONS = ["work", "gaming", "social", "messages"]
 MOCK_API_URL = "https://nef-api.onrender.com/get_policy"
-SES_URL = "https://mock-ses.onrender.com/validate"
+#SES_URL = "http://localhost:8081/validate"
+SES_URL = "https://mock-ses.onrender.com/validate" 
 
 QOS_MAPPING = {
     "Policy-Gold": "High",
@@ -71,7 +73,7 @@ def authenticate_with_ses(imsi):
     try:
         response = requests.post(SES_URL, json={"imsi": imsi}, timeout=2)
         if response.status_code == 200:
-            return response.json()
+            return response.json().get("user_id")
     except Exception as e:
         st.error(f"SES authentication failed: {e}")
     return None
@@ -83,17 +85,15 @@ st.title("📈 Real-Time Biofeedback Tracker")
 # Input IMSI
 imsi_input = st.text_input("Enter IMSI to Authenticate", max_chars=20, help="Example: 714011002222222")
 
-user_profile = None
+authenticated_user = None
 if imsi_input:
-    user_profile = authenticate_with_ses(imsi_input)
-    if user_profile:
-        st.success(f"✅ Authenticated as {user_profile['user_id']}")
-        st.write(f"🧾 Profile ID: `{user_profile.get('profile_id', 'N/A')}`")
-        st.write(f"🏢 Operator: `{user_profile.get('operator', 'N/A')}`")
+    authenticated_user = authenticate_with_ses(imsi_input)
+    if authenticated_user:
+        st.success(f"✅ Authenticated as {authenticated_user}")
     else:
         st.error("❌ Authentication failed. Please check IMSI.")
 
-if user_profile:
+if authenticated_user:
     app_id = st.selectbox("Select Application", APP_OPTIONS)
     duration = st.slider("Session Duration (seconds)", 10, 600, DEFAULT_DURATION)
 
@@ -131,7 +131,7 @@ if user_profile:
 
             now = datetime.utcnow()
             data = generate_mock_data()
-            nef_data = get_policy_from_nef(user_profile['user_id'], app_id, data["stress"])
+            nef_data = get_policy_from_nef(authenticated_user, app_id, data["stress"])
             policy = nef_data["policy"]
             bandwidth = nef_data["bandwidth"]
             latency = nef_data["latency"]
@@ -146,11 +146,11 @@ if user_profile:
             if state == "Critical":
                 st.error("🚨 Critical stress detected! Emergency escalation triggered.")
                 with open("emergency_contact_log.txt", "a") as f:
-                    f.write(f"{now} - {user_profile['user_id']} - {app_id} - Critical stress\n")
+                    f.write(f"{now} - {authenticated_user} - {app_id} - Critical stress\n")
 
             log = BiofeedbackLog(
                 session_id=st.session_state.session_id,
-                user_id=user_profile['user_id'],
+                user_id=authenticated_user,
                 app_id=app_id,
                 heart_rate=int(data["heart_rate"]),
                 hrv=int(data["hrv"]),
@@ -176,7 +176,7 @@ if user_profile:
 
             df = pd.DataFrame(st.session_state.data_log)
             with placeholder.container():
-                st.subheader(f"Live Session - {user_profile['user_id']} ({app_id})")
+                st.subheader(f"Live Session - {authenticated_user} ({app_id})")
                 st.line_chart(df.set_index("time")[["heart_rate", "hrv", "stress"]], height=400)
                 st.metric("Current State", state)
                 st.metric("QoS Level", qos_level)
@@ -198,11 +198,7 @@ if user_profile:
         st.metric("Average Bandwidth", f"{avg_bw:.2f} Mbps")
         st.metric("Average Latency", f"{avg_latency:.2f} ms")
         st.metric("Overall Status", status)
-        st.write(f"👤 IMSI: `{imsi_input}`")
-        st.write(f"🧾 User ID: `{user_profile['user_id']}`")
-        st.write(f"📛 Profile ID: `{user_profile.get('profile_id', 'N/A')}`")
-        st.write(f"🏢 Operator: `{user_profile.get('operator', 'N/A')}`")
-        st.write(f"📱 App: `{app_id}` | 📊 QoS Policy: `{policy}`")
+        st.write(f"👤 IMSI: `{imsi_input}` | 🧾 Mapped User ID: `{authenticated_user}` | 📱 App: `{app_id}` | 📊 QoS Policy: `{policy}`")
 
         df["time"] = df["time"].astype(str)
         csv = df.to_csv(index=False).encode('utf-8')
